@@ -85,6 +85,7 @@ header .sub { color: var(--muted); font-size: 12px; }
   padding: 9px 14px; border-radius: 8px; border: 1px solid var(--card-line);
   background: var(--bg2); color: var(--text); cursor: pointer;
 }
+.settings button.toggle-on { color: var(--green); border-color: var(--green); background: rgba(46,230,166,0.08); }
 
 /* tabs */
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--card-line); margin-bottom: 16px; }

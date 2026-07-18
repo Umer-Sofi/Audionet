@@ -30,6 +30,7 @@ export interface Config {
   default_frequency: number;
   device_address: number;
   device_name: string;
+  loopback: boolean;
 }
 
 export interface Device {
@@ -79,6 +80,17 @@ export async function sendMessage(message: string, to = 0): Promise<SendResponse
     throw new Error(`send failed (${r.status})`);
   }
   return (await r.json()) as SendResponse;
+}
+
+export async function setLoopback(enabled: boolean): Promise<boolean> {
+  const r = await fetch(`${getBackend()}/loopback`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ enabled }),
+  });
+  if (!r.ok) throw new Error(`set loopback failed (${r.status})`);
+  const j = (await r.json()) as { loopback: boolean };
+  return j.loopback;
 }
 
 export async function setDevice(address: number, name?: string): Promise<Device> {

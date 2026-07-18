@@ -37,6 +37,9 @@ class TransmitService:
         finally:
             # Always restore listening even if playback raised.
             self._receive.mark_listening()
-        # Clear any residual self-heard audio before we resume decoding.
-        self._receive.mic.clear()
+        # Normally we discard the audio we just played so we don't decode our
+        # own message. In loopback mode we *keep* it so a single laptop can
+        # receive its own transmission (send -> speaker -> mic -> receive).
+        if not self._receive.loopback:
+            self._receive.mic.clear()
         return report

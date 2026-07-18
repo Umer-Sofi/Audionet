@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     device_address: int = 1          # this node's address (1-255). 0 is reserved.
     device_name: str = "Device"      # human-friendly label for the UI.
 
+    # Loopback: decode our own transmissions so a single laptop can test
+    # send -> receive by itself. Off by default (normal two-device operation).
+    loopback: bool = False
+
     # --- FSK modem ----------------------------------------------------------
     baud: int = 50                   # symbols (bits) per second. Lower = robust.
     amplitude: float = 0.6           # output waveform amplitude in [0, 1].

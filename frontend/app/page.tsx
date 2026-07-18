@@ -13,6 +13,7 @@ import {
   sendMessage,
   setBackend,
   setDevice,
+  setLoopback,
   type Config,
 } from "@/lib/api";
 
@@ -55,6 +56,7 @@ export default function Page() {
   const [broadcast, setBroadcast] = useState(true);
   const [target, setTarget] = useState(2); // destination device id when not broadcasting
   const [peers, setPeers] = useState<number[]>([]);
+  const [loopback, setLoopbackState] = useState(false);
 
   const lastIdRef = useRef(0);
   const startRef = useRef(0);
@@ -108,6 +110,7 @@ export default function Page() {
         setConfig(c);
         setMyAddress(c.device_address);
         setMyName(c.device_name);
+        setLoopbackState(c.loopback);
         done = true;
       } catch {
         /* retry */
@@ -253,6 +256,21 @@ export default function Page() {
           <button onClick={saveIdentity}>Save identity</button>
           <button onClick={() => (mic.active ? mic.stop() : mic.start())}>
             {mic.active ? "Disable mic metrics" : "Enable mic metrics"}
+          </button>
+          <button
+            className={loopback ? "toggle-on" : ""}
+            onClick={async () => {
+              try {
+                const v = await setLoopback(!loopback);
+                setLoopbackState(v);
+                showToast(v ? "Loopback ON (single-laptop test)" : "Loopback OFF");
+              } catch {
+                showToast("Could not toggle loopback");
+              }
+            }}
+            title="Decode this laptop's own transmission (test on one machine)"
+          >
+            {loopback ? "🔁 Loopback: ON" : "Loopback: OFF"}
           </button>
         </div>
       )}

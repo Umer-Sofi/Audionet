@@ -74,6 +74,13 @@ class ConfigResponse(BaseModel):
     default_frequency: float = Field(..., description="Default base frequency (Hz).")
     device_address: int = Field(..., description="This node's device address (1-255).")
     device_name: str = Field(..., description="This node's display name.")
+    loopback: bool = Field(..., description="Whether the node decodes its own sound.")
+
+
+class LoopbackRequest(BaseModel):
+    """Body for ``POST /loopback``."""
+
+    enabled: bool = Field(..., description="Decode this node's own transmissions.")
 
 
 class DeviceRequest(BaseModel):

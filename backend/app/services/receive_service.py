@@ -56,8 +56,19 @@ class ReceiveService:
         self._count = 0  # total messages received so far (also the latest id)
         self._address = settings.device_address  # this node's address (1-255)
         self._name = settings.device_name
+        self._loopback = settings.loopback  # decode our own sound (single-laptop test)
         self._thread: threading.Thread | None = None
         self._running = False
+
+    # --- loopback (single-laptop self test) ---------------------------------
+    @property
+    def loopback(self) -> bool:
+        with self._lock:
+            return self._loopback
+
+    def set_loopback(self, enabled: bool) -> None:
+        with self._lock:
+            self._loopback = enabled
 
     # --- device identity ----------------------------------------------------
     @property

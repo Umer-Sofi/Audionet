@@ -18,6 +18,7 @@ from app.api.schemas import (
     ConfigResponse,
     DeviceRequest,
     DeviceResponse,
+    LoopbackRequest,
     ReceivedResponse,
     SendRequest,
     SendResponse,
@@ -103,7 +104,18 @@ def get_config(
         default_frequency=default_plan().base,
         device_address=rx.address,
         device_name=rx.name,
+        loopback=rx.loopback,
     )
+
+
+@router.post("/loopback")
+def set_loopback(
+    body: LoopbackRequest,
+    rx: ReceiveService = Depends(get_receive_service),
+) -> dict[str, bool]:
+    """Enable/disable decoding this node's own sound (single-laptop testing)."""
+    rx.set_loopback(body.enabled)
+    return {"loopback": rx.loopback}
 
 
 @router.get("/device", response_model=DeviceResponse)
