@@ -1,52 +1,81 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import Spectrum from "@/components/Spectrum";
+import { useEffect, useMemo, useRef, useState } from "react";
+import Radar from "@/components/Radar";
+import Waveform from "@/components/Waveform";
+import MetricTile from "@/components/MetricTile";
+import { useMic } from "@/lib/useMic";
 import {
+  fetchConfig,
   fetchReceived,
   fetchStatus,
   getBackend,
   sendMessage,
   setBackend,
-  type NodeStatus,
+  type Config,
 } from "@/lib/api";
 
-interface Bubble {
-  kind: "sent" | "recv";
-  text: string;
-  meta: string;
+interface RxMessage {
+  id: number;
+  message: string;
+  base_frequency: number | null;
+  sync_score: number | null;
+  at: string;
 }
 
-type Tab = "messages" | "spectrum";
+type Tab = "send" | "receive" | "status";
+
+function fmtUptime(ms: number): string {
+  const s = Math.floor(ms / 1000);
+  const hh = String(Math.floor(s / 3600)).padStart(2, "0");
+  const mm = String(Math.floor((s % 3600) / 60)).padStart(2, "0");
+  const ss = String(s % 60).padStart(2, "0");
+  return `${hh}:${mm}:${ss}`;
+}
 
 export default function Page() {
-  const [tab, setTab] = useState<Tab>("messages");
-  const [status, setStatus] = useState<string>("connecting…");
-  const [bubbles, setBubbles] = useState<Bubble[]>([]);
+  const [tab, setTab] = useState<Tab>("send");
+  const [status, setStatus] = useState("connecting…");
+  const [config, setConfig] = useState<Config | null>(null);
+  const [messages, setMessages] = useState<RxMessage[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [lastSend, setLastSend] = useState<{ duration: number; freq: number } | null>(null);
   const [backendUrl, setBackendUrl] = useState("http://localhost:8000");
+  const [showSettings, setShowSettings] = useState(false);
+  const [now, setNow] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
 
   const lastIdRef = useRef(0);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const startRef = useRef(0);
 
-  const showToast = (msg: string) => {
-    setToast(msg);
+  const expectedFreqs = useMemo(() => {
+    if (!config) return [];
+    return config.frequencies.flatMap((f) => [f, f + config.freq_shift]);
+  }, [config]);
+  const mic = useMic(expectedFreqs);
+
+  const showToast = (m: string) => {
+    setToast(m);
     setTimeout(() => setToast(null), 2200);
   };
 
-  // Load persisted backend URL on mount.
+  // init
   useEffect(() => {
     setBackendUrl(getBackend());
+    startRef.current = Date.now();
+    setNow(Date.now());
+    mic.start(); // ask for mic so metrics + waveform are live (falls back to "—")
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Auto-scroll to newest bubble.
+  // uptime ticker
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [bubbles]);
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
 
-  // Poll /status.
+  // poll status
   useEffect(() => {
     const tick = async () => {
       try {
@@ -60,16 +89,42 @@ export default function Page() {
     return () => clearInterval(id);
   }, []);
 
-  // Poll /received for new messages.
+  // load config (retry until reachable)
+  useEffect(() => {
+    let done = false;
+    const tick = async () => {
+      try {
+        setConfig(await fetchConfig());
+        done = true;
+      } catch {
+        /* retry */
+      }
+    };
+    tick();
+    const id = setInterval(() => {
+      if (done) clearInterval(id);
+      else tick();
+    }, 1500);
+    return () => clearInterval(id);
+  }, []);
+
+  // poll received
   useEffect(() => {
     const tick = async () => {
       try {
         const r = await fetchReceived();
         if (r.id && r.id > lastIdRef.current && r.message) {
           lastIdRef.current = r.id;
-          const freq = r.base_frequency ? `${(r.base_frequency / 1000).toFixed(1)} kHz` : "";
-          const sync = r.sync_score != null ? ` · sync ${(r.sync_score * 100).toFixed(0)}%` : "";
-          setBubbles((b) => [...b, { kind: "recv", text: r.message, meta: `received · ${freq}${sync}` }]);
+          setMessages((m) => [
+            ...m,
+            {
+              id: r.id,
+              message: r.message,
+              base_frequency: r.base_frequency,
+              sync_score: r.sync_score,
+              at: new Date().toLocaleTimeString(),
+            },
+          ]);
         }
       } catch {
         /* transient */
@@ -86,92 +141,279 @@ export default function Page() {
     setSending(true);
     try {
       const res = await sendMessage(text);
-      const freq = res.base_frequency ? `${(res.base_frequency / 1000).toFixed(1)} kHz` : "";
-      setBubbles((b) => [...b, { kind: "sent", text, meta: `sent · ${freq}` }]);
+      setLastSend({ duration: res.duration_seconds, freq: res.base_frequency });
+      showToast(`Sent on ${(res.base_frequency / 1000).toFixed(1)} kHz`);
       setInput("");
     } catch {
-      showToast("Could not reach backend — check the URL");
+      showToast("Could not reach backend — check settings");
     } finally {
       setSending(false);
     }
   };
 
-  const statusClass = status.toLowerCase().includes("listen")
-    ? "listening"
-    : status.toLowerCase().includes("send")
-    ? "sending"
-    : "idle";
+  // derived
+  const connected = status !== "server offline";
+  const isSending = status === "Sending";
+  const isListening = status === "Listening";
+  const last = messages[messages.length - 1] ?? null;
+  const freqKHz = ((last?.base_frequency ?? config?.default_frequency ?? 18600) / 1000).toFixed(1);
+  const bwKHz = ((config?.freq_shift ?? 600) / 1000).toFixed(1);
+  const bitrate = config?.baud ?? "—";
+  const confidence = last?.sync_score != null ? `${(last.sync_score * 100).toFixed(1)}%` : "—";
+  const uptime = startRef.current ? fmtUptime(now - startRef.current) : "00:00:00";
+  const m = mic.metrics;
+  const snrTxt = m.snrDb != null ? `${m.snrDb} dB` : "—";
+  const noiseTxt = m.noiseDb != null ? `${m.noiseDb} dB` : "—";
+  const offsetTxt = m.offsetHz != null ? `${m.offsetHz > 0 ? "+" : ""}${m.offsetHz} Hz` : "—";
 
   return (
-    <div className="app">
+    <div className={`app ${tab}`}>
       <header>
-        <div>
-          <h1>🔊 AudioNet</h1>
-          <span className="sub">text over sound</span>
+        <div className="brand">
+          <span className="logo">〜</span>
+          <div>
+            <h1>AudioNet</h1>
+            <span className="sub">Ultrasonic Communication</span>
+          </div>
         </div>
-        <label className="backend">
-          Backend:
-          <input
-            value={backendUrl}
-            onChange={(e) => setBackendUrl(e.target.value)}
-            onBlur={() => {
-              setBackend(backendUrl);
-              showToast(`Backend set to ${backendUrl}`);
-            }}
-          />
-        </label>
-        <div className="status">
-          <span className={`dot ${statusClass}`} />
-          <span>{status}</span>
+
+        <div className={`conn ${connected ? "on" : "off"}`}>
+          <span className="dot" /> {connected ? "Connected" : "Offline"}
         </div>
+        <button className="gear" onClick={() => setShowSettings((s) => !s)} title="Settings">
+          ⚙
+        </button>
       </header>
 
-      <div className="tabs">
-        <div className={`tab ${tab === "messages" ? "active" : ""}`} onClick={() => setTab("messages")}>
-          💬 Messages
+      {showSettings && (
+        <div className="settings">
+          <label>
+            Backend URL
+            <input
+              value={backendUrl}
+              onChange={(e) => setBackendUrl(e.target.value)}
+              onBlur={() => {
+                setBackend(backendUrl);
+                showToast(`Backend set to ${backendUrl}`);
+              }}
+            />
+          </label>
+          <button onClick={() => (mic.active ? mic.stop() : mic.start())}>
+            {mic.active ? "Disable mic metrics" : "Enable mic metrics"}
+          </button>
         </div>
-        <div className={`tab ${tab === "spectrum" ? "active" : ""}`} onClick={() => setTab("spectrum")}>
-          📶 Spectrum
-        </div>
-      </div>
+      )}
+
+      <nav className="tabs">
+        <button className={tab === "send" ? "active" : ""} onClick={() => setTab("send")}>
+          ➤ Send
+        </button>
+        <button className={tab === "receive" ? "active" : ""} onClick={() => setTab("receive")}>
+          ⭳ Receive
+        </button>
+        <button className={tab === "status" ? "active" : ""} onClick={() => setTab("status")}>
+          〜 Status
+        </button>
+      </nav>
 
       <main>
-        {tab === "messages" ? (
-          <section className="view">
-            <div className="messages">
-              {bubbles.length === 0 ? (
-                <div className="empty">
-                  No messages yet. Type below and hit Send — this laptop&apos;s speaker plays it,
-                  the other laptop&apos;s mic hears it and it appears there.
+        {/* ---------------- SEND ---------------- */}
+        {tab === "send" && (
+          <div className="stack">
+            <section className="card">
+              <h2>Send Message</h2>
+              <div className="composer">
+                <textarea
+                  value={input}
+                  maxLength={500}
+                  placeholder="Type a message to transmit over sound…"
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) onSend();
+                  }}
+                />
+                <span className="counter">{input.length} / 500</span>
+                <button className="primary" onClick={onSend} disabled={sending || !input.trim()}>
+                  ➤ {sending ? "Sending…" : "Send Message"}
+                </button>
+              </div>
+            </section>
+
+            <section className="card">
+              <h2>Transmission Status</h2>
+              <div className="statusrow">
+                <Radar color="green" active={isSending} />
+                <div className="statusinfo">
+                  <div className={`bigstate ${isSending ? "on-green" : ""}`}>
+                    <span className="pulse" /> {isSending ? "Sending…" : "Ready"}
+                  </div>
+                  <div className="statusnote">To nearby devices</div>
+                  <div className="kv">
+                    <span>⌁ Frequency</span>
+                    <b>{freqKHz} kHz</b>
+                  </div>
+                  <div className="kv">
+                    <span>⊞ Modulation</span>
+                    <b>FSK</b>
+                  </div>
+                  <div className="kv">
+                    <span>⇥ Bitrate</span>
+                    <b>{bitrate} bps</b>
+                  </div>
+                  <div className="kv">
+                    <span>◷ Duration</span>
+                    <b>{lastSend ? `${lastSend.duration.toFixed(1)} s` : "—"}</b>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section className="card">
+              <h2>Live Signal</h2>
+              <Waveform analyser={mic.analyser} color="#3fb950" />
+            </section>
+          </div>
+        )}
+
+        {/* ---------------- RECEIVE ---------------- */}
+        {tab === "receive" && (
+          <div className="stack">
+            <section className="card">
+              <h2>Receiving Status</h2>
+              <div className="statusrow">
+                <Radar color="purple" active={isListening} />
+                <div className="statusinfo">
+                  <div className={`bigstate ${isListening ? "on-purple" : ""}`}>
+                    <span className="pulse" /> {isListening ? "Listening…" : status}
+                  </div>
+                  <div className="statusnote">Waiting for messages</div>
+                  <div className="kv">
+                    <span>⌁ Frequency</span>
+                    <b className="pv">{freqKHz} kHz</b>
+                  </div>
+                  <div className="kv">
+                    <span>⊟ Bandwidth</span>
+                    <b className="pv">{bwKHz} kHz</b>
+                  </div>
+                  <div className="kv">
+                    <span>◎ Sensitivity</span>
+                    <b className="pv">High</b>
+                  </div>
+                  <div className="kv">
+                    <span>⌁ Noise Level</span>
+                    <b className="pv">{noiseTxt}</b>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section className="card">
+              <div className="cardhead">
+                <h2>Received Message</h2>
+                {last && <span className="badge">✓ Valid</span>}
+              </div>
+              {last ? (
+                <div className="rxmsg">
+                  <div className="rxtext">{last.message}</div>
+                  <div className="rxmeta">Received at: {last.at}</div>
+                  <div className="rxmeta">Length: {last.message.length} characters</div>
                 </div>
               ) : (
-                bubbles.map((b, i) => (
-                  <div key={i} className={`bubble ${b.kind}`}>
-                    {b.text}
-                    <span className="meta">{b.meta}</span>
-                  </div>
-                ))
+                <div className="empty">No messages received yet.</div>
               )}
-              <div ref={messagesEndRef} />
-            </div>
-            <div className="composer">
-              <input
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && onSend()}
-                placeholder="Type a message and press Enter…"
-                autoComplete="off"
-                disabled={sending}
-              />
-              <button onClick={onSend} disabled={sending}>
-                {sending ? "Sending…" : "Send"}
-              </button>
-            </div>
-          </section>
-        ) : (
-          <Spectrum onError={showToast} />
+            </section>
+
+            <section className="card">
+              <h2>Signal Quality</h2>
+              <div className="metrics">
+                <MetricTile
+                  icon="⇅"
+                  label="SNR"
+                  value={snrTxt}
+                  rating={m.snrDb != null ? (m.snrDb > 20 ? "Excellent" : "Good") : undefined}
+                  ratingColor={m.snrDb != null && m.snrDb > 20 ? "excellent" : "good"}
+                />
+                <MetricTile
+                  icon="⇢"
+                  label="Packet Loss"
+                  value={last ? "0%" : "—"}
+                  rating={last ? "Excellent" : undefined}
+                  ratingColor="excellent"
+                />
+                <MetricTile
+                  icon="⟳"
+                  label="Frequency Offset"
+                  value={offsetTxt}
+                  rating={m.offsetHz != null ? (Math.abs(m.offsetHz) < 25 ? "Good" : "Fair") : undefined}
+                  ratingColor="good"
+                />
+                <MetricTile
+                  icon="⌁"
+                  label="Confidence"
+                  value={confidence}
+                  rating={last?.sync_score != null ? (last.sync_score > 0.95 ? "Excellent" : "Good") : undefined}
+                  ratingColor={last?.sync_score != null && last.sync_score > 0.95 ? "excellent" : "good"}
+                />
+              </div>
+            </section>
+          </div>
+        )}
+
+        {/* ---------------- STATUS ---------------- */}
+        {tab === "status" && (
+          <div className="stack">
+            <section className="card">
+              <h2>Node</h2>
+              <div className="kv"><span>State</span><b>{status}</b></div>
+              <div className="kv"><span>Backend</span><b>{getBackend()}</b></div>
+              <div className="kv"><span>Uptime (session)</span><b>{uptime}</b></div>
+              <div className="kv"><span>Messages received</span><b>{messages.length}</b></div>
+              <div className="kv"><span>Mic metrics</span><b>{mic.active ? "on" : "off"}</b></div>
+            </section>
+
+            <section className="card">
+              <h2>Modem Configuration</h2>
+              {config ? (
+                <>
+                  <div className="kv"><span>Sample rate</span><b>{config.sample_rate} Hz</b></div>
+                  <div className="kv"><span>Bit rate (baud)</span><b>{config.baud} bps</b></div>
+                  <div className="kv"><span>Tone spacing</span><b>{config.freq_shift} Hz</b></div>
+                  <div className="kv"><span>Candidate freqs</span><b>{config.frequencies.map((f) => (f / 1000).toFixed(1)).join(", ")} kHz</b></div>
+                </>
+              ) : (
+                <div className="empty">Loading config…</div>
+              )}
+            </section>
+
+            <section className="card">
+              <h2>Message History</h2>
+              {messages.length ? (
+                <div className="history">
+                  {[...messages].reverse().map((mm) => (
+                    <div key={mm.id} className="hrow">
+                      <span className="htext">{mm.message}</span>
+                      <span className="hmeta">
+                        {mm.at} · {((mm.base_frequency ?? 0) / 1000).toFixed(1)} kHz ·{" "}
+                        {mm.sync_score != null ? `${(mm.sync_score * 100).toFixed(0)}%` : "—"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="empty">No history yet.</div>
+              )}
+            </section>
+          </div>
         )}
       </main>
+
+      <footer>
+        <span className="fdev">▭ This Device</span>
+        <span>Frequency: <b>{freqKHz} kHz</b></span>
+        <span>SNR: <b>{snrTxt}</b></span>
+        <span>Uptime: <b>{uptime}</b></span>
+        <span>Messages: <b>{messages.length}</b></span>
+      </footer>
 
       {toast && <div className="toast show">{toast}</div>}
     </div>

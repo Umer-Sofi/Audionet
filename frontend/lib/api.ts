@@ -18,6 +18,14 @@ export interface SendResponse {
   duration_seconds: number;
 }
 
+export interface Config {
+  sample_rate: number;
+  baud: number;
+  freq_shift: number;
+  frequencies: number[];
+  default_frequency: number;
+}
+
 const DEFAULT_BACKEND =
   process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
 
@@ -43,6 +51,11 @@ export async function fetchStatus(): Promise<NodeStatus> {
 export async function fetchReceived(): Promise<ReceivedResponse> {
   const r = await fetch(`${getBackend()}/received`);
   return (await r.json()) as ReceivedResponse;
+}
+
+export async function fetchConfig(): Promise<Config> {
+  const r = await fetch(`${getBackend()}/config`);
+  return (await r.json()) as Config;
 }
 
 export async function sendMessage(message: string): Promise<SendResponse> {

@@ -15,11 +15,14 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from app.api.schemas import (
+    ConfigResponse,
     ReceivedResponse,
     SendRequest,
     SendResponse,
     StatusResponse,
 )
+from app.config.frequencies import candidate_plans, default_plan
+from app.config.settings import get_settings
 from app.services.receive_service import ReceiveService
 from app.services.transmit_service import TransmitService
 
@@ -78,3 +81,16 @@ def get_status(
 ) -> StatusResponse:
     """Return the coarse node status: Idle, Listening or Sending."""
     return StatusResponse(status=rx.status.value)
+
+
+@router.get("/config", response_model=ConfigResponse)
+def get_config() -> ConfigResponse:
+    """Return the real modem parameters so the UI can display them."""
+    settings = get_settings()
+    return ConfigResponse(
+        sample_rate=settings.sample_rate,
+        baud=settings.baud,
+        freq_shift=settings.freq_shift,
+        frequencies=[p.base for p in candidate_plans()],
+        default_frequency=default_plan().base,
+    )

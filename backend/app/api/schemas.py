@@ -52,3 +52,13 @@ class StatusResponse(BaseModel):
     """Response for ``GET /status``."""
 
     status: str = Field(..., examples=["Listening", "Sending", "Idle"])
+
+
+class ConfigResponse(BaseModel):
+    """Response for ``GET /config`` - real modem parameters for the UI."""
+
+    sample_rate: int = Field(..., description="Audio sample rate in Hz.")
+    baud: int = Field(..., description="Symbols per second (bit rate).")
+    freq_shift: float = Field(..., description="Hz between the '0' and '1' tones.")
+    frequencies: list[float] = Field(..., description="Candidate base frequencies (Hz).")
+    default_frequency: float = Field(..., description="Default base frequency (Hz).")
