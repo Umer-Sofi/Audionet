@@ -25,11 +25,15 @@ class TransmitService:
         # Share the mic so environment sensing uses the already-open stream.
         self._transmitter = Transmitter(mic=receive_service.mic)
 
-    def send(self, message: str) -> TransmitReport:
-        """Transmit ``message``; flip status to Sending for the duration."""
+    def send(self, message: str, to: int = 0) -> TransmitReport:
+        """Transmit ``message`` to device ``to`` (0 = broadcast to all).
+
+        The source address is this node's own address, taken from the receive
+        service so both directions share one identity.
+        """
         self._receive.mark_sending()
         try:
-            report = self._transmitter.send(message)
+            report = self._transmitter.send(message, dst=to, src=self._receive.address)
         finally:
             # Always restore listening even if playback raised.
             self._receive.mark_listening()

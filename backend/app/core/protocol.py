@@ -5,18 +5,20 @@ so it can be imported anywhere without side effects.
 
 Frame layout (what actually gets modulated), in transmission order::
 
-    ┌───────────┬─────┬─────┬──────────────┬──────┬─────┐
-    │ PREAMBLE  │ SFD │ LEN │   PAYLOAD    │ CRC8 │ EOF │
-    │ 0101..(N) │ 1B  │ 1B  │  LEN bytes   │  1B  │ 1B  │
-    └───────────┴─────┴─────┴──────────────┴──────┴─────┘
+    ┌───────────┬─────┬─────┬─────┬─────┬──────────────┬──────┬─────┐
+    │ PREAMBLE  │ SFD │ DST │ SRC │ LEN │   PAYLOAD    │ CRC8 │ EOF │
+    │ 0101..(N) │ 1B  │ 1B  │ 1B  │ 1B  │  LEN bytes   │  1B  │ 1B  │
+    └───────────┴─────┴─────┴─────┴─────┴──────────────┴──────┴─────┘
 
 * PREAMBLE - alternating bits. Gives the receiver a steady tone-toggle to
   detect energy and lock onto the bit timing.
 * SFD      - Start-Of-Frame Delimiter byte. Marks byte alignment / "here comes
   the real data".
+* DST      - destination device address (0 = broadcast to everyone).
+* SRC      - source device address (who sent it).
 * LEN      - number of payload bytes (0-255).
 * PAYLOAD  - the UTF-8 encoded message.
-* CRC8     - checksum over LEN + PAYLOAD for integrity.
+* CRC8     - checksum over DST + SRC + LEN + PAYLOAD for integrity.
 * EOF      - End-Of-Frame sentinel, a final sanity check.
 """
 
@@ -31,6 +33,11 @@ SFD: int = 0x7E   # 0111 1110 - start of frame delimiter
 EOF: int = 0x7E   # end of frame sentinel
 
 MAX_PAYLOAD_BYTES: int = 255  # LEN is a single byte.
+
+# --- Device addressing ------------------------------------------------------
+# Every node has a 1-byte address (1-255). A packet carries a destination and a
+# source address. Address 0 is the broadcast address: every node accepts it.
+BROADCAST_ADDR: int = 0
 
 
 # --- Bit <-> byte helpers ---------------------------------------------------

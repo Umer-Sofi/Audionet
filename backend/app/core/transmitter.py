@@ -25,6 +25,8 @@ class TransmitReport:
     plan: FrequencyPlan
     rationale: str
     duration_seconds: float
+    dst: int
+    src: int
 
 
 class Transmitter:
@@ -35,14 +37,20 @@ class Transmitter:
         # let the AI sense noise before choosing a channel.
         self._mic = mic
 
-    def send(self, message: str) -> TransmitReport:
-        """Choose the cleanest channel, modulate ``message`` and play it."""
+    def send(self, message: str, dst: int = 0, src: int = 0) -> TransmitReport:
+        """Choose the cleanest channel, modulate ``message`` and play it.
+
+        Args:
+            message: text to transmit.
+            dst:     destination device address (0 = broadcast).
+            src:     this device's address.
+        """
         # 1. AI picks the least-noisy channel right now.
         selection = frequency_selector.choose_channel(self._mic)
         plan = selection.plan
 
-        # 2. Text -> framed bits -> FSK waveform.
-        waveform = encoder.encode_message(message, plan)
+        # 2. Text -> framed bits (with addressing) -> FSK waveform.
+        waveform = encoder.encode_message(message, plan, dst=dst, src=src)
 
         # 3. Play it out of the speaker (blocks until finished).
         speaker.play(waveform)
@@ -53,4 +61,6 @@ class Transmitter:
             plan=plan,
             rationale=selection.rationale,
             duration_seconds=duration,
+            dst=dst,
+            src=src,
         )

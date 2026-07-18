@@ -50,6 +50,26 @@ header .sub { color: var(--muted); font-size: 12px; }
   width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--card-line);
   background: rgba(20, 26, 40, 0.6); color: var(--muted); cursor: pointer; font-size: 16px;
 }
+.myid {
+  font-size: 13px; color: var(--muted); padding: 7px 12px; border-radius: 20px;
+  border: 1px solid var(--card-line); background: rgba(20, 26, 40, 0.6);
+}
+.myid b { color: var(--green); }
+
+/* target selector */
+.target { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.target-label { color: var(--muted); font-size: 13px; }
+.chip {
+  padding: 7px 13px; border-radius: 20px; border: 1px solid var(--card-line);
+  background: var(--bg2); color: var(--muted); cursor: pointer; font-size: 13px;
+}
+.chip.on { color: var(--green); border-color: var(--green); background: rgba(46,230,166,0.08); }
+.target-id {
+  width: 70px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--card-line);
+  background: var(--bg2); color: var(--text); outline: none;
+}
+.peers { color: var(--muted); font-size: 12px; display: flex; gap: 4px; align-items: center; }
+.peer { padding: 3px 8px; border-radius: 8px; border: 1px solid var(--card-line); background: var(--bg2); color: var(--purple); cursor: pointer; font-size: 12px; }
 
 .settings {
   display: flex; gap: 14px; align-items: flex-end; flex-wrap: wrap;
@@ -143,7 +163,12 @@ main { flex: 1; }
 /* received message */
 .badge { font-size: 12px; color: var(--green2); background: rgba(63,185,80,0.12); border: 1px solid rgba(63,185,80,0.3); padding: 4px 10px; border-radius: 8px; }
 .rxmsg { background: var(--bg2); border: 1px solid var(--card-line); border-radius: 12px; padding: 16px; }
+.rxfrom { font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+.rxfrom b { color: var(--purple); }
+.tag { margin-left: 8px; font-size: 11px; padding: 2px 8px; border-radius: 6px; background: rgba(160,107,255,0.12); border: 1px solid rgba(160,107,255,0.3); color: var(--purple); }
+.tag.direct { background: rgba(46,230,166,0.12); border-color: rgba(46,230,166,0.3); color: var(--green); }
 .rxtext { font-size: 24px; font-weight: 700; background: linear-gradient(135deg, var(--purple), #d0a0ff); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 10px; }
+.hfrom { color: var(--purple); margin-right: 6px; }
 .rxmeta { color: var(--muted); font-size: 13px; }
 .empty { color: var(--muted); font-size: 14px; text-align: center; padding: 18px; }
 

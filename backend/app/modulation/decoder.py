@@ -37,6 +37,8 @@ class DecodeResult:
 
     message: str
     crc_ok: bool
+    dst: int             # destination address in the frame
+    src: int             # source address in the frame
     offset: int          # sample offset where the frame was found
     sync_score: float    # fraction of sync bits matched (0..1)
 
@@ -146,7 +148,8 @@ def decode(signal: np.ndarray, plan: FrequencyPlan) -> DecodeResult | None:
     # Demodulate a generous number of bits (LEN + max payload + CRC + EOF),
     # bounded by what's left in the buffer.
     remaining = (filtered.shape[0] - frame_offset) // spb
-    max_frame_bits = (1 + protocol.MAX_PAYLOAD_BYTES + 2) * 8
+    # DST + SRC + LEN + payload + CRC + EOF.
+    max_frame_bits = (2 + 1 + protocol.MAX_PAYLOAD_BYTES + 2) * 8
     n_bits = int(min(remaining, max_frame_bits))
     frame_bits = _decode_bits_at(filtered, frame_offset, n_bits, plan)
 
@@ -157,6 +160,8 @@ def decode(signal: np.ndarray, plan: FrequencyPlan) -> DecodeResult | None:
     return DecodeResult(
         message=parsed.message,
         crc_ok=parsed.crc_ok,
+        dst=parsed.dst,
+        src=parsed.src,
         offset=best_offset,
         sync_score=best_score,
     )

@@ -33,6 +33,10 @@ class Settings(BaseSettings):
     input_device: int | None = None  # sounddevice device index, None = default.
     output_device: int | None = None
 
+    # --- Device identity ----------------------------------------------------
+    device_address: int = 1          # this node's address (1-255). 0 is reserved.
+    device_name: str = "Device"      # human-friendly label for the UI.
+
     # --- FSK modem ----------------------------------------------------------
     baud: int = 50                   # symbols (bits) per second. Lower = robust.
     amplitude: float = 0.6           # output waveform amplitude in [0, 1].

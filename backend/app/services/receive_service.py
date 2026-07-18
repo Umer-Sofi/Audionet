@@ -19,6 +19,7 @@ from enum import Enum
 
 from app.audio.microphone import Microphone
 from app.config.settings import get_settings
+from app.core import protocol
 from app.core.receiver import Receiver
 
 
@@ -38,20 +39,43 @@ class ReceivedMessage:
     message: str
     base_frequency: float
     sync_score: float
+    src: int  # address of the device that sent it
+    dst: int  # address it was addressed to (0 = broadcast)
 
 
 class ReceiveService:
     """Continuously listens for AudioNet frames on a background thread."""
 
     def __init__(self) -> None:
+        settings = get_settings()
         self.mic = Microphone()
         self._receiver = Receiver()
         self._lock = threading.Lock()
         self._status: Status = Status.IDLE
         self._last: ReceivedMessage | None = None
         self._count = 0  # total messages received so far (also the latest id)
+        self._address = settings.device_address  # this node's address (1-255)
+        self._name = settings.device_name
         self._thread: threading.Thread | None = None
         self._running = False
+
+    # --- device identity ----------------------------------------------------
+    @property
+    def address(self) -> int:
+        with self._lock:
+            return self._address
+
+    @property
+    def name(self) -> str:
+        with self._lock:
+            return self._name
+
+    def set_identity(self, address: int, name: str | None = None) -> None:
+        """Change this node's address/name at runtime (from the UI)."""
+        with self._lock:
+            self._address = max(1, min(255, address))
+            if name is not None:
+                self._name = name
 
     # --- lifecycle ----------------------------------------------------------
     def start(self) -> None:
@@ -94,15 +118,21 @@ class ReceiveService:
                 signal = self.mic.snapshot()
                 report = self._receiver.try_decode(signal)
                 if report is not None:
-                    with self._lock:
-                        self._count += 1
-                        self._last = ReceivedMessage(
-                            id=self._count,
-                            message=report.message,
-                            base_frequency=report.plan.base,
-                            sync_score=report.sync_score,
-                        )
-                    # Drop the consumed audio so we don't re-decode it.
+                    # Accept only if it's addressed to us or is a broadcast.
+                    for_us = report.dst == self.address or report.dst == protocol.BROADCAST_ADDR
+                    if for_us:
+                        with self._lock:
+                            self._count += 1
+                            self._last = ReceivedMessage(
+                                id=self._count,
+                                message=report.message,
+                                base_frequency=report.plan.base,
+                                sync_score=report.sync_score,
+                                src=report.src,
+                                dst=report.dst,
+                            )
+                    # Drop the consumed audio whether or not it was for us, so we
+                    # don't keep re-decoding the same transmission.
                     self.mic.clear()
             stop_event.wait(poll)
 

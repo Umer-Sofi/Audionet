@@ -14,10 +14,18 @@ from app.core import packetizer
 from app.modulation import fsk
 
 
-def encode_message(message: str, plan: FrequencyPlan) -> np.ndarray:
+def encode_message(
+    message: str, plan: FrequencyPlan, dst: int = 0, src: int = 0
+) -> np.ndarray:
     """Encode ``message`` into a playable FSK waveform using ``plan``.
+
+    Args:
+        message: text to send.
+        plan:    FSK tone pair to use.
+        dst:     destination address (0 = broadcast).
+        src:     this device's address.
 
     Returns a float32 mono waveform ready to hand to the speaker.
     """
-    bits = packetizer.build_frame_bits(message)
+    bits = packetizer.build_frame_bits(message, dst=dst, src=src)
     return fsk.modulate_bits(bits, plan)

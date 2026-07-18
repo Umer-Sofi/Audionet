@@ -12,6 +12,7 @@ import {
   getBackend,
   sendMessage,
   setBackend,
+  setDevice,
   type Config,
 } from "@/lib/api";
 
@@ -20,6 +21,8 @@ interface RxMessage {
   message: string;
   base_frequency: number | null;
   sync_score: number | null;
+  source: number | null;
+  to: number | null;
   at: string;
 }
 
@@ -45,6 +48,13 @@ export default function Page() {
   const [showSettings, setShowSettings] = useState(false);
   const [now, setNow] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
+
+  // device addressing
+  const [myAddress, setMyAddress] = useState(1);
+  const [myName, setMyName] = useState("Device");
+  const [broadcast, setBroadcast] = useState(true);
+  const [target, setTarget] = useState(2); // destination device id when not broadcasting
+  const [peers, setPeers] = useState<number[]>([]);
 
   const lastIdRef = useRef(0);
   const startRef = useRef(0);
@@ -94,7 +104,10 @@ export default function Page() {
     let done = false;
     const tick = async () => {
       try {
-        setConfig(await fetchConfig());
+        const c = await fetchConfig();
+        setConfig(c);
+        setMyAddress(c.device_address);
+        setMyName(c.device_name);
         done = true;
       } catch {
         /* retry */
@@ -122,9 +135,14 @@ export default function Page() {
               message: r.message,
               base_frequency: r.base_frequency,
               sync_score: r.sync_score,
+              source: r.source,
+              to: r.to,
               at: new Date().toLocaleTimeString(),
             },
           ]);
+          if (r.source != null && r.source > 0) {
+            setPeers((p) => (p.includes(r.source!) ? p : [...p, r.source!]));
+          }
         }
       } catch {
         /* transient */
@@ -138,16 +156,28 @@ export default function Page() {
   const onSend = async () => {
     const text = input.trim();
     if (!text || sending) return;
+    const dst = broadcast ? 0 : target;
     setSending(true);
     try {
-      const res = await sendMessage(text);
+      const res = await sendMessage(text, dst);
       setLastSend({ duration: res.duration_seconds, freq: res.base_frequency });
-      showToast(`Sent on ${(res.base_frequency / 1000).toFixed(1)} kHz`);
+      showToast(dst === 0 ? "Broadcast to all devices" : `Sent to device #${dst}`);
       setInput("");
     } catch {
       showToast("Could not reach backend — check settings");
     } finally {
       setSending(false);
+    }
+  };
+
+  const saveIdentity = async () => {
+    try {
+      const d = await setDevice(myAddress, myName);
+      setMyAddress(d.address);
+      setMyName(d.name);
+      showToast(`This device is now #${d.address} (${d.name})`);
+    } catch {
+      showToast("Could not update device identity");
     }
   };
 
@@ -177,6 +207,9 @@ export default function Page() {
           </div>
         </div>
 
+        <div className="myid" title="This device's address">
+          {myName} <b>#{myAddress}</b>
+        </div>
         <div className={`conn ${connected ? "on" : "off"}`}>
           <span className="dot" /> {connected ? "Connected" : "Offline"}
         </div>
@@ -198,6 +231,26 @@ export default function Page() {
               }}
             />
           </label>
+          <label>
+            My Device ID
+            <input
+              type="number"
+              min={1}
+              max={255}
+              value={myAddress}
+              onChange={(e) => setMyAddress(Number(e.target.value))}
+              style={{ width: 90 }}
+            />
+          </label>
+          <label>
+            Device Name
+            <input
+              value={myName}
+              onChange={(e) => setMyName(e.target.value)}
+              style={{ width: 140 }}
+            />
+          </label>
+          <button onClick={saveIdentity}>Save identity</button>
           <button onClick={() => (mic.active ? mic.stop() : mic.start())}>
             {mic.active ? "Disable mic metrics" : "Enable mic metrics"}
           </button>
@@ -222,6 +275,43 @@ export default function Page() {
           <div className="stack">
             <section className="card">
               <h2>Send Message</h2>
+              <div className="target">
+                <span className="target-label">Send to:</span>
+                <button
+                  className={`chip ${broadcast ? "on" : ""}`}
+                  onClick={() => setBroadcast(true)}
+                >
+                  📢 Broadcast (all)
+                </button>
+                <button
+                  className={`chip ${!broadcast ? "on" : ""}`}
+                  onClick={() => setBroadcast(false)}
+                >
+                  🎯 Device
+                </button>
+                {!broadcast && (
+                  <>
+                    <input
+                      className="target-id"
+                      type="number"
+                      min={1}
+                      max={255}
+                      value={target}
+                      onChange={(e) => setTarget(Number(e.target.value))}
+                    />
+                    {peers.length > 0 && (
+                      <span className="peers">
+                        seen:{" "}
+                        {peers.map((p) => (
+                          <button key={p} className="peer" onClick={() => setTarget(p)}>
+                            #{p}
+                          </button>
+                        ))}
+                      </span>
+                    )}
+                  </>
+                )}
+              </div>
               <div className="composer">
                 <textarea
                   value={input}
@@ -314,6 +404,14 @@ export default function Page() {
               </div>
               {last ? (
                 <div className="rxmsg">
+                  <div className="rxfrom">
+                    From <b>#{last.source ?? "?"}</b>
+                    {last.to === 0 ? (
+                      <span className="tag">broadcast</span>
+                    ) : (
+                      <span className="tag direct">to #{last.to}</span>
+                    )}
+                  </div>
                   <div className="rxtext">{last.message}</div>
                   <div className="rxmeta">Received at: {last.at}</div>
                   <div className="rxmeta">Length: {last.message.length} characters</div>
@@ -391,7 +489,9 @@ export default function Page() {
                 <div className="history">
                   {[...messages].reverse().map((mm) => (
                     <div key={mm.id} className="hrow">
-                      <span className="htext">{mm.message}</span>
+                      <span className="htext">
+                        <b className="hfrom">#{mm.source ?? "?"}</b> {mm.message}
+                      </span>
                       <span className="hmeta">
                         {mm.at} · {((mm.base_frequency ?? 0) / 1000).toFixed(1)} kHz ·{" "}
                         {mm.sync_score != null ? `${(mm.sync_score * 100).toFixed(0)}%` : "—"}

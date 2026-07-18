@@ -24,6 +24,8 @@ class ReceiveReport:
     message: str
     plan: FrequencyPlan
     sync_score: float
+    dst: int
+    src: int
 
 
 class Receiver:
@@ -45,5 +47,7 @@ class Receiver:
                     message=result.message,
                     plan=plan,
                     sync_score=result.sync_score,
+                    dst=result.dst,
+                    src=result.src,
                 )
         return None

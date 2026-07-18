@@ -16,6 +16,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from app.api.schemas import (
     ConfigResponse,
+    DeviceRequest,
+    DeviceResponse,
     ReceivedResponse,
     SendRequest,
     SendResponse,
@@ -50,12 +52,14 @@ def send_message(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail="message too long for a single frame",
         )
-    report = tx.send(body.message)
+    report = tx.send(body.message, to=body.to)
     return SendResponse(
         status="sent",
         base_frequency=report.plan.base,
         rationale=report.rationale,
         duration_seconds=round(report.duration_seconds, 3),
+        to=report.dst,
+        source=report.src,
     )
 
 
@@ -72,6 +76,8 @@ def get_received(
         message=last.message,
         base_frequency=last.base_frequency,
         sync_score=round(last.sync_score, 3),
+        source=last.src,
+        to=last.dst,
     )
 
 
@@ -84,7 +90,9 @@ def get_status(
 
 
 @router.get("/config", response_model=ConfigResponse)
-def get_config() -> ConfigResponse:
+def get_config(
+    rx: ReceiveService = Depends(get_receive_service),
+) -> ConfigResponse:
     """Return the real modem parameters so the UI can display them."""
     settings = get_settings()
     return ConfigResponse(
@@ -93,4 +101,24 @@ def get_config() -> ConfigResponse:
         freq_shift=settings.freq_shift,
         frequencies=[p.base for p in candidate_plans()],
         default_frequency=default_plan().base,
+        device_address=rx.address,
+        device_name=rx.name,
     )
+
+
+@router.get("/device", response_model=DeviceResponse)
+def get_device(
+    rx: ReceiveService = Depends(get_receive_service),
+) -> DeviceResponse:
+    """Return this node's device identity (address + name)."""
+    return DeviceResponse(address=rx.address, name=rx.name)
+
+
+@router.post("/device", response_model=DeviceResponse)
+def set_device(
+    body: DeviceRequest,
+    rx: ReceiveService = Depends(get_receive_service),
+) -> DeviceResponse:
+    """Set this node's address (and optional name) so others can target it."""
+    rx.set_identity(body.address, body.name)
+    return DeviceResponse(address=rx.address, name=rx.name)

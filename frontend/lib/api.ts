@@ -9,6 +9,8 @@ export interface ReceivedResponse {
   message: string;
   base_frequency: number | null;
   sync_score: number | null;
+  source: number | null;
+  to: number | null;
 }
 
 export interface SendResponse {
@@ -16,6 +18,8 @@ export interface SendResponse {
   base_frequency: number;
   rationale: string;
   duration_seconds: number;
+  to: number;
+  source: number;
 }
 
 export interface Config {
@@ -24,6 +28,13 @@ export interface Config {
   freq_shift: number;
   frequencies: number[];
   default_frequency: number;
+  device_address: number;
+  device_name: string;
+}
+
+export interface Device {
+  address: number;
+  name: string;
 }
 
 const DEFAULT_BACKEND =
@@ -58,14 +69,26 @@ export async function fetchConfig(): Promise<Config> {
   return (await r.json()) as Config;
 }
 
-export async function sendMessage(message: string): Promise<SendResponse> {
+export async function sendMessage(message: string, to = 0): Promise<SendResponse> {
   const r = await fetch(`${getBackend()}/send`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({ message, to }),
   });
   if (!r.ok) {
     throw new Error(`send failed (${r.status})`);
   }
   return (await r.json()) as SendResponse;
+}
+
+export async function setDevice(address: number, name?: string): Promise<Device> {
+  const r = await fetch(`${getBackend()}/device`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ address, name }),
+  });
+  if (!r.ok) {
+    throw new Error(`set device failed (${r.status})`);
+  }
+  return (await r.json()) as Device;
 }
