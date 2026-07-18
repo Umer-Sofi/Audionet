@@ -49,14 +49,13 @@ def candidate_plans() -> list[FrequencyPlan]:
     settings = get_settings()
     shift = settings.freq_shift
 
-    # Base frequencies. Many consumer laptop speakers/mics roll off hard above
-    # ~15 kHz, so true ultrasonic (18-20 kHz) often produces *no* signal at all
-    # and even ~15 kHz can drop the upper tone. This 10-13.6 kHz band (with the
-    # +600 Hz shift) keeps *both* tones well within what typical hardware can
-    # reliably reproduce and capture. It is high-pitched but audible.
-    # If your hardware supports higher, bump these toward 18-19 kHz for full
-    # inaudibility; if you want maximum reliability, lower them further.
-    bases = [10_000.0, 11_000.0, 12_000.0, 13_000.0]
+    # Base frequencies in the (near-)ultrasonic band. With the +600 Hz shift the
+    # two tones span ~18-20 kHz: inaudible to most people. NOTE: this only works
+    # if the speaker AND microphone can actually reproduce/capture these
+    # frequencies - many built-in laptop devices roll off around 15-16 kHz, and
+    # Bluetooth headsets/earbuds cannot do it at all. If nothing decodes, your
+    # hardware can't carry 18 kHz; lower these until it does.
+    bases = [18_000.0, 18_600.0, 19_200.0, 19_400.0]
 
     plans: list[FrequencyPlan] = []
     for base in bases:
