@@ -16,6 +16,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import router
 from app.services.receive_service import ReceiveService
@@ -45,6 +46,16 @@ app = FastAPI(
     description="Exchange text between laptops over (near-)ultrasonic sound.",
     lifespan=lifespan,
 )
+
+# The frontend lives in a separate folder / origin, so allow browser calls.
+# Permissive CORS is fine for a local demo.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.include_router(router)
 
 

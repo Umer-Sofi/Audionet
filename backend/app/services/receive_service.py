@@ -34,6 +34,7 @@ class Status(str, Enum):
 class ReceivedMessage:
     """The last successfully received message and how it arrived."""
 
+    id: int  # monotonic counter so clients can detect a *new* message
     message: str
     base_frequency: float
     sync_score: float
@@ -48,6 +49,7 @@ class ReceiveService:
         self._lock = threading.Lock()
         self._status: Status = Status.IDLE
         self._last: ReceivedMessage | None = None
+        self._count = 0  # total messages received so far (also the latest id)
         self._thread: threading.Thread | None = None
         self._running = False
 
@@ -93,7 +95,9 @@ class ReceiveService:
                 report = self._receiver.try_decode(signal)
                 if report is not None:
                     with self._lock:
+                        self._count += 1
                         self._last = ReceivedMessage(
+                            id=self._count,
                             message=report.message,
                             base_frequency=report.plan.base,
                             sync_score=report.sync_score,

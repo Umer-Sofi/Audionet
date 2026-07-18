@@ -38,6 +38,7 @@ class SendResponse(BaseModel):
 class ReceivedResponse(BaseModel):
     """Response for ``GET /received``."""
 
+    id: int = Field(default=0, description="Monotonic id; increments per new message.")
     message: str = Field(default="", description="Last decoded message ('' if none).")
     base_frequency: float | None = Field(
         default=None, description="Base frequency it arrived on, if any."

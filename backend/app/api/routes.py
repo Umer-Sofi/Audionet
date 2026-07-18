@@ -63,8 +63,9 @@ def get_received(
     """Return the most recently decoded message (empty if none yet)."""
     last = rx.last_message
     if last is None:
-        return ReceivedResponse(message="")
+        return ReceivedResponse(id=0, message="")
     return ReceivedResponse(
+        id=last.id,
         message=last.message,
         base_frequency=last.base_frequency,
         sync_score=round(last.sync_score, 3),
