@@ -1,0 +1,12 @@
+# Runtime dependencies. Version ranges chosen to install cleanly on
+# Python 3.9 through 3.13 (pip resolves the right build per interpreter).
+fastapi>=0.110
+uvicorn[standard]>=0.27
+numpy>=1.24
+scipy>=1.10
+sounddevice>=0.4.6          # wheels bundle PortAudio (no system install needed)
+pydantic>=2.6
+pydantic-settings>=2.2
+
+# Lets pydantic evaluate "X | None" type hints on Python < 3.10.
+eval_type_backport>=0.2; python_version < "3.10"
